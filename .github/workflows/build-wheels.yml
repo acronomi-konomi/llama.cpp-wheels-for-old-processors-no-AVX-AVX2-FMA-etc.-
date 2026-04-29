@@ -1,7 +1,7 @@
 name: Build Non-AVX Wheels
 
 on:
-  workflow_dispatch: # Запуск вручную
+  workflow_dispatch:
 
 jobs:
   build_wheels:
@@ -9,7 +9,6 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        # Указываем нужные версии Python
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
@@ -23,21 +22,37 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install dependencies
+      - name: Install Build Tools
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install scikit-build cmake ninja
+          python -m pip install --upgrade pip
+          python -m pip install wheel setuptools scikit-build cmake ninja
 
-      - name: Build wheel with CMake flags
-        shell: bash
+      - name: Build Wheel
         env:
           CMAKE_ARGS: "-DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF"
+          SKBUILD_CMAKE_BUILD_TYPE: "Release"
+        shell: bash
         run: |
-          python -m pip install llama-cpp-python --no-binary llama-cpp-python
+          python setup.py bdist_wheel
+          ls -la dist/
+          mkdir -p wheelhouse
+          cp dist/*.whl wheelhouse/ || true
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: llama-cpp-python-wheel-py${{ matrix.python-version }}
-          path: wheelhouse/*.whl
+          path: wheelhouse/
           if-no-files-found: warn
+
+      - name: Debug - List all files
+        if: failure()
+        run: |
+          echo "=== Current directory ==="
+          pwd
+          echo "=== Files in current dir ==="
+          ls -la
+          echo "=== Files in dist ==="
+          ls -la dist/ 2>/dev/null || echo "No dist directory"
+          echo "=== Files in wheelhouse ==="
+          ls -la wheelhouse/ 2>/dev/null || echo "No wheelhouse directory"
