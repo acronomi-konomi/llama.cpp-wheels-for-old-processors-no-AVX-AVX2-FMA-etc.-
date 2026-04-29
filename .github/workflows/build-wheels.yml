@@ -1,54 +1,64 @@
-name: Build Non-AVX Wheels
+name: Build llama-cpp-python wheels (No AVX/AVX2/FMA)
 
 on:
+  # Запуск вручную из интерфейса GitHub
   workflow_dispatch:
+    inputs:
+      llama_cpp_python_version:
+        description: 'Версия llama-cpp-python (например: 0.3.9), пусто = последняя'
+        required: false
+        default: ''
 
 jobs:
-  build_wheels:
-    name: Build wheels on Windows
+  build-wheel:
+    name: Build py${{ matrix.python-version }} wheel
     runs-on: windows-latest
+
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-      - name: Checkout llama.cpp-python
-        uses: actions/checkout@v4
-        with:
-          repository: 'abetlen/llama-cpp-python'
-          submodules: 'recursive'
-
-      - name: Setup Python
+      # 1. Устанавливаем нужную версию Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Build Tools
+      # 2. Обновляем pip и ставим build-зависимости
+      - name: Install build dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install wheel setuptools scikit-build cmake ninja
+          pip install wheel setuptools
 
-      - name: Build Wheel
+      # 3. Собираем wheel с отключёнными AVX/AVX2/FMA/F16C
+      #    GGML_AVX=OFF   — отключает AVX
+      #    GGML_AVX2=OFF  — отключает AVX2
+      #    GGML_FMA=OFF   — отключает FMA
+      #    GGML_F16C=OFF  — отключает F16C (тоже требует AVX)
+      - name: Build llama-cpp-python wheel (No AVX)
         env:
           CMAKE_ARGS: "-DGGML_AVX=OFF -DGGML_AVX2=OFF -DGGML_FMA=OFF -DGGML_F16C=OFF"
-          SKBUILD_CMAKE_BUILD_TYPE: "Release"
-        shell: bash
         run: |
-          python setup.py bdist_wheel
-          mkdir -p wheelhouse
-          cp dist/*.whl wheelhouse/
+          $version = "${{ github.event.inputs.llama_cpp_python_version }}"
+          if ($version -eq "") {
+            pip wheel llama-cpp-python --no-deps --wheel-dir dist/
+          } else {
+            pip wheel "llama-cpp-python==$version" --no-deps --wheel-dir dist/
+          }
+        shell: pwsh
 
-      - name: Upload Artifacts
+      # 4. Показываем что собралось
+      - name: List built wheels
+        run: |
+          Get-ChildItem dist/
+        shell: pwsh
+
+      # 5. Загружаем wheel как артефакт
+      - name: Upload wheel artifact
         uses: actions/upload-artifact@v4
         with:
-          name: llama-cpp-python-wheel-py${{ matrix.python-version }}
-          path: wheelhouse/
-          if-no-files-found: warn
-
-      - name: Debug - List files
-        if: always()
-        run: |
-          echo "=== Wheelhouse contents ==="
-          ls -la wheelhouse/ 2>/dev/null || echo "No wheelhouse directory"
-          echo "=== Dist contents ==="
-          ls -la dist/ 2>/dev/null || echo "No dist directory"
+          name: llama-cpp-python-noavx-py${{ matrix.python-version }}-win-amd64
+          path: dist/*.whl
+          retention-days: 90
