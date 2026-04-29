@@ -12,9 +12,10 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-      - name: Checkout
+      - name: Checkout llama.cpp-python
         uses: actions/checkout@v4
         with:
+          repository: 'abetlen/llama-cpp-python'
           submodules: 'recursive'
 
       - name: Setup Python
@@ -34,9 +35,8 @@ jobs:
         shell: bash
         run: |
           python setup.py bdist_wheel
-          ls -la dist/
           mkdir -p wheelhouse
-          cp dist/*.whl wheelhouse/ || true
+          cp dist/*.whl wheelhouse/
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
@@ -45,14 +45,10 @@ jobs:
           path: wheelhouse/
           if-no-files-found: warn
 
-      - name: Debug - List all files
-        if: failure()
+      - name: Debug - List files
+        if: always()
         run: |
-          echo "=== Current directory ==="
-          pwd
-          echo "=== Files in current dir ==="
-          ls -la
-          echo "=== Files in dist ==="
-          ls -la dist/ 2>/dev/null || echo "No dist directory"
-          echo "=== Files in wheelhouse ==="
+          echo "=== Wheelhouse contents ==="
           ls -la wheelhouse/ 2>/dev/null || echo "No wheelhouse directory"
+          echo "=== Dist contents ==="
+          ls -la dist/ 2>/dev/null || echo "No dist directory"
